@@ -5,16 +5,37 @@ from geometry_msgs.msg import Quaternion, Vector3, Point
 from nav_msgs.msg import Odometry
 import math
 import time 
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
 
 class ROSPublisher(Node):
     def __init__(self):
         super().__init__("go2_genesis_node")
+
+        self.tf_broadcaster = TransformBroadcaster(self)
 
         self.imu_publisher = self.create_publisher(Imu, '/imu', 10)
         self.lidar_publisher = self.create_publisher(LaserScan, '/scan', 10)
         self.odometry_publisher = self.create_publisher(Odometry, '/odom', 10)
 
         self.get_logger().info('ROS Publisher node started!')
+
+    def broadcast_tf(self, pos, quat_wxyzw):
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'odom'
+        t.child_frame_id = 'base_link'
+
+        t.transform.translation.x = float(pos[0])
+        t.transform.translation.y = float(pos[1])
+        t.transform.translation.z = float(pos[2])
+
+        t.transform.rotation.x = float(quat_wxyzw[1])
+        t.transform.rotation.y = float(quat_wxyzw[2])
+        t.transform.rotation.z = float(quat_wxyzw[3])
+        t.transform.rotation.w = float(quat_wxyzw[0])
+
+        self.tf_broadcaster.sendTransform(t)
 
 
     def publish_imu(self, quat_wxyzw, ang_vel, lin_acc):
@@ -55,13 +76,13 @@ class ROSPublisher(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'base_link'
 
-        msg.angle_min = -math.pi
-        msg.angle_max = math.pi
-        msg.angle_increment = math.pi / 180.0
+        msg.angle_min = -math.radians(200/2)
+        msg.angle_max = math.radians(200/2)
+        msg.angle_increment = math.radians(200/128)
         msg.time_increment = 0.0
         msg.scan_time = 0.1
-        msg.range_min = 0.1
-        msg.range_max = 10.0
+        msg.range_min = 0.05
+        msg.range_max = 100.0
 
         msg.ranges = [float(d) for d in lidar_distances]
         msg.intensities = []

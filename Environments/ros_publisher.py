@@ -7,6 +7,7 @@ import math
 import time 
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
+import numpy as np
 
 class ROSPublisher(Node):
     def __init__(self):
@@ -23,6 +24,7 @@ class ROSPublisher(Node):
 
     def publish_all(self, pos, quat_wxyzw, lin_vel, ang_vel, lin_acc, lidar_points):
 
+        current_time = self.get_clock().now().to_msg()
         # Processing Data Here
 
         pos = pos.squeeze(0)
@@ -39,15 +41,15 @@ class ROSPublisher(Node):
         lidar_distances = lidar_points[1].squeeze(0)[:, 32]
         lidar_points = lidar_points[0].squeeze(0)
 
-        self.broadcast_tf(pos, quat_wxyzw)
-        self.publish_imu(quat_wxyzw, ang_vel, lin_acc)
-        # self.publish_lidar_2d(lidar_distances)
-        self.publish_lidar_3d(lidar_points)
-        self.publish_odometry(pos, quat_wxyzw, lin_vel, ang_vel)
+        self.broadcast_tf(pos, quat_wxyzw, current_time)
+        self.publish_imu(quat_wxyzw, ang_vel, lin_acc, current_time)
+        self.publish_lidar_2d(lidar_distances, current_time)
+        self.publish_lidar_3d(lidar_points, current_time)
+        self.publish_odometry(pos, quat_wxyzw, lin_vel, ang_vel, current_time)
 
-    def broadcast_tf(self, pos, quat_wxyzw):
+    def broadcast_tf(self, pos, quat_wxyzw, current_time):
         t = TransformStamped()
-        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.stamp = current_time
         t.header.frame_id = 'odom'
         t.child_frame_id = 'base_link'
 
@@ -63,10 +65,10 @@ class ROSPublisher(Node):
         self.tf_broadcaster.sendTransform(t)
 
 
-    def publish_imu(self, quat_wxyzw, ang_vel, lin_acc):
+    def publish_imu(self, quat_wxyzw, ang_vel, lin_acc, current_time):
         msg = Imu()
 
-        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.stamp    = current_time
         msg.header.frame_id = 'base_link'
 
         msg.orientation = Quaternion(
@@ -95,15 +97,15 @@ class ROSPublisher(Node):
 
         self.get_logger().info('Published one imu message!')
 
-    def publish_lidar_2d(self, lidar_distances):
+    def publish_lidar_2d(self, lidar_distances, current_time):
         msg = LaserScan()
 
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = current_time
         msg.header.frame_id = 'base_link'
 
         msg.angle_min = -math.radians(200/2)
         msg.angle_max = math.radians(200/2)
-        msg.angle_increment = math.radians(200/128)
+        msg.angle_increment = math.radians(200/127)
         msg.time_increment = 0.0
         msg.scan_time = 0.1
         msg.range_min = 0.05
@@ -117,14 +119,28 @@ class ROSPublisher(Node):
         self.get_logger().info('Published one lidar message!')
 
 
-    def publish_lidar_3d(self, lidar_points):
-        points_np = lidar_points.detach().cpu().numpy()
+    def publish_lidar_3d(self, lidar_points, current_time):
+        points_np = lidar_points.detach().cpu().numpy().astype(np.float32)
         points_np = points_np.reshape(-1, 3)
+        valid = (
+            np.isfinite(points_np).all(axis=1) &
+            (np.linalg.norm(points_np, axis=1) > 0.05)
+        )
+        points_np = points_np[valid]
+
+        height_mask = (points_np[:, 2] > -0.3) & (points_np[:, 2] < 1.5)
+        points_np = points_np[height_mask]
+
+        distance_mask = np.linalg.norm(points_np[:, :2], axis=1) > 0.3
+        points_np = points_np[distance_mask]
+
+        range_mask = np.linalg.norm(points_np, axis=1) < 15.0
+        points_np = points_np[range_mask]
 
         msg = PointCloud2()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = current_time
         msg.header.frame_id = 'base_link'
-
+        
         msg.fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
@@ -132,7 +148,7 @@ class ROSPublisher(Node):
         ]
 
         msg.height = 1
-        msg.width = len(points_np)
+        msg.width = points_np.shape[0]
         msg.is_dense = True
         msg.is_bigendian = False
         msg.point_step = 12
@@ -145,9 +161,9 @@ class ROSPublisher(Node):
 
 
 
-    def publish_odometry(self, pos, quat_wxyzw, lin_vel, ang_vel):
+    def publish_odometry(self, pos, quat_wxyzw, lin_vel, ang_vel, current_time):
         msg = Odometry()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = current_time
         msg.header.frame_id = 'odom'
         msg.child_frame_id = 'base_link'
 

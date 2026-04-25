@@ -8,6 +8,7 @@ import time
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import numpy as np
+from slam_toolbox.srv import Reset
 
 class ROSPublisher(Node):
     def __init__(self):
@@ -38,14 +39,16 @@ class ROSPublisher(Node):
         lidar_distances = lidar_points[1].squeeze(0)[:, 32]
         32 Means we take the 32nd point from the 64 points, which is the front straight point of the robot.
         """
-        lidar_distances = lidar_points[1].squeeze(0)[:, 32]
+        lidar_distances = lidar_points[1].squeeze(0)[:, 30:35]
         lidar_points = lidar_points[0].squeeze(0)
 
         self.broadcast_tf(pos, quat_wxyzw, current_time)
         self.publish_imu(quat_wxyzw, ang_vel, lin_acc, current_time)
+        self.publish_odometry(pos, quat_wxyzw, lin_vel, ang_vel, current_time)
+
         self.publish_lidar_2d(lidar_distances, current_time)
         self.publish_lidar_3d(lidar_points, current_time)
-        self.publish_odometry(pos, quat_wxyzw, lin_vel, ang_vel, current_time)
+
 
     def broadcast_tf(self, pos, quat_wxyzw, current_time):
         t = TransformStamped()
@@ -95,28 +98,30 @@ class ROSPublisher(Node):
 
         self.imu_publisher.publish(msg)
 
-        self.get_logger().info('Published one imu message!')
+        # self.get_logger().info('Published one imu message!')
 
     def publish_lidar_2d(self, lidar_distances, current_time):
+        
+        lidar_distances = np.min(lidar_distances.detach().cpu().numpy().astype(np.float32), axis=1)
         msg = LaserScan()
 
         msg.header.stamp = current_time
         msg.header.frame_id = 'base_link'
 
-        msg.angle_min = -math.radians(200/2)
-        msg.angle_max = math.radians(200/2)
-        msg.angle_increment = math.radians(200/127)
+        msg.angle_min = -math.pi
+        msg.angle_max = math.pi
+        msg.angle_increment = 2 * math.pi/128
         msg.time_increment = 0.0
         msg.scan_time = 0.1
-        msg.range_min = 0.05
-        msg.range_max = 100.0
+        msg.range_min = 0.5
+        msg.range_max = 8.0
 
         msg.ranges = [float(d) for d in lidar_distances]
         msg.intensities = []
         
         self.lidar_publisher_2d.publish(msg)
 
-        self.get_logger().info('Published one lidar message!')
+        # self.get_logger().info('Published one lidar message!')
 
 
     def publish_lidar_3d(self, lidar_points, current_time):
@@ -128,14 +133,16 @@ class ROSPublisher(Node):
         )
         points_np = points_np[valid]
 
-        height_mask = (points_np[:, 2] > -0.3) & (points_np[:, 2] < 1.5)
+        height_mask = (points_np[:, 2] > -0.3) & (points_np[:, 2] < 1)
         points_np = points_np[height_mask]
 
-        distance_mask = np.linalg.norm(points_np[:, :2], axis=1) > 0.3
+        distance_mask = np.linalg.norm(points_np[:, :2], axis=1) > 0.5
         points_np = points_np[distance_mask]
 
-        range_mask = np.linalg.norm(points_np, axis=1) < 15.0
+        range_mask = np.linalg.norm(points_np, axis=1) < 8.0
         points_np = points_np[range_mask]
+
+
 
         msg = PointCloud2()
         msg.header.stamp = current_time
@@ -157,7 +164,7 @@ class ROSPublisher(Node):
         msg.data = points_np.tobytes()
 
         self.lidar_3d_publisher.publish(msg)
-        self.get_logger().info('Published 3D lidar message!')
+        # self.get_logger().info('Published 3D lidar message!')
 
 
 
@@ -193,4 +200,4 @@ class ROSPublisher(Node):
         )
 
         self.odometry_publisher.publish(msg)
-        self.get_logger().info('Published one odometry message!')
+        # self.get_logger().info('Published one odometry message!'aru p

@@ -5,13 +5,15 @@ import torch
 import genesis as gs
 from rsl_rl.runners import OnPolicyRunner
 # from walk_env_batch_terrain import WalkENV
-from Environments.walk_env_batch import WalkENV
+from Environments.walk_env_batch_custom_command_advanced_test import WalkENV
 import time
+
+import rclpy
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-e", "--exp_name", type=str, default="go2_rsl")
-    parser.add_argument("--ckpt", type=int, default=2700)
+    parser.add_argument("-e", "--exp_name", type=str, default="go2_rsl_custom_command_terrain")
+    parser.add_argument("--ckpt", type=int, default=800)
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 
@@ -28,7 +30,7 @@ def main():
         render=True,
         device=args.device,
         t_x=8,
-        t_y=20,
+        t_y=10,
         number_of_lanes=1,
         number_of_rows=5
         )
@@ -45,19 +47,20 @@ def main():
     obs, _ = env.reset()
     obs = obs.to(args.device)
 
+    obs, _ = env.reset()
+    obs = obs.to(args.device)
+
     with torch.no_grad():
         while True:
+            rclpy.spin_once(env.ros_publisher, timeout_sec=0)
+
+            env.custom_commands[:, 0] = env.ros_publisher.latest_vx
+            env.custom_commands[:, 1] = env.ros_publisher.latest_wz
+
             actions = policy(obs)
+
             obs, reward, done, info = env.step(actions)
-            # torch.cuda.synchronize()
-            # print(done)
-            # print()
-            
-            # obs = obs.to(args.device)
-            # if done[0]:
-            #     print("Episode ended !!!!.")
-            #     obs, _ = env.reset()
-            #     obs = obs.to(args.device)
+            obs = obs.to(args.device)
 
 if __name__ == "__main__":
     main()

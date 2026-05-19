@@ -1,5 +1,5 @@
 # Genesis
-
+[![Genesis](https://img.shields.io/badge/Genesis-v0.4.7-blueviolet)](https://github.com/Genesis-Embodied-AI/Genesis)
 <hr>
 
 ![Demo](Media/push_up.gif)

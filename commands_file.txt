@@ -1,0 +1,71 @@
+#For KISS
+
+
+conda deactivate
+conda deactivate
+
+cd ~/ros2_ws                   
+rm -rf build/kiss_icp/ install/kiss_icp/
+
+
+source /opt/ros/jazzy/setup.zsh
+colcon build --packages-select kiss_icp 
+
+source install/setup.zsh                
+
+# Make sure CycloneDDS is active
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Launch it!
+ros2 launch kiss_icp odometry.launch.py \
+    topic:=/scan_3d \
+    base_frame:=base_link \
+    odom_frame:=odom \
+    publish_odom_tf:=false  
+
+
+-----------------------------
+
+
+#For SLAM ToolBox
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+source /opt/ros/jazzy/setup.zsh
+ros2 launch slam_toolbox online_async_launch.py slam_params_file:=/home/yayy/My/Codeeeeee/Simulators/GenesisWorkingMine/mapper_params.yaml
+
+
+
+-------------------------
+
+
+#My python program
+
+conda activate gen_env
+python rsl_rl_model_test.py
+
+
+------------
+
+#For rviz
+
+source /opt/ros/jazzy/setup.zsh
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+rviz2
+
+
+
+-----------------
+#For Nav2
+source /opt/ros/jazzy/setup.zsh                     
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ros2 launch /home/yayy/My/Codeeeeee/Simulators/GenesisWorkingMine/nav2.launch.py 
+
+
+
+# Terminal 4 — explore_lite
+source /opt/ros/jazzy/setup.zsh
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ros2 launch explore_lite explore.launch.py params_file:=/home/yayy/explore_params.yaml
+
+
+# Map save
+ros2 run nav2_map_server map_saver_cli -f my_map  

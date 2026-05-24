@@ -9,6 +9,7 @@ from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import numpy as np
 from slam_toolbox.srv import Reset
+from geometry_msgs.msg import Twist
 
 class ROSPublisher(Node):
     def __init__(self):
@@ -21,7 +22,22 @@ class ROSPublisher(Node):
         self.odometry_publisher = self.create_publisher(Odometry, '/odom', 10)
         self.lidar_3d_publisher = self.create_publisher(PointCloud2, '/scan_3d', 10)
 
+
+        self.latest_vx = 0.0
+        self.latest_wz = 0.0
+        self.cmd_vel_sub = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self._cmd_vel_callback,
+            10
+        )
+
         self.get_logger().info('ROS Publisher node started!')
+
+    def _cmd_vel_callback(self, msg):
+        self.latest_vx = msg.linear.x
+        self.latest_wz = msg.angular.z
+
 
     def publish_all(self, pos, quat_wxyzw, lin_vel, ang_vel, lin_acc, lidar_points):
 
@@ -142,7 +158,12 @@ class ROSPublisher(Node):
         range_mask = np.linalg.norm(points_np, axis=1) < 8.0
         points_np = points_np[range_mask]
 
+        # def voxel_downsample(points, voxel_size=0.1):
+        #     voxel_indices = np.floor(points / voxel_size).astype(np.int32)
+        #     _, unique_idx = np.unique(voxel_indices, axis=0, return_index=True)
+        #     return points[unique_idx]
 
+        # points_np = voxel_downsample(points_np, voxel_size=0.1)
 
         msg = PointCloud2()
         msg.header.stamp = current_time
